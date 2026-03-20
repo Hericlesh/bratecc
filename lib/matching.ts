@@ -131,7 +131,7 @@ function calculateCompatibilityScore(
     score += 30
   } else {
     // Setores complementares
-    const complementary = {
+    const complementary: Record<string, string[]> = {
       'energy': ['logistics', 'financial', 'legal'],
       'technology': ['financial', 'legal', 'consulting'],
       'food': ['logistics', 'legal', 'financial'],
