@@ -205,7 +205,7 @@ function calculateSynergyScore(a1: any, a2: any): number {
   let score = 0
 
   // Verificar complementaridade
-  const complementary = {
+  const complementary: Record<string, string[]> = {
     'Financial': ['Logistics', 'Technology', 'Legal'],
     'Logistics': ['Financial', 'Technology'],
     'Legal': ['Financial', 'Technology'],
