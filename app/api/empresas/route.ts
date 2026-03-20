@@ -4,6 +4,8 @@ import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/db'
 import { generateMatches } from '@/lib/matching'
 
+export const dynamic = 'force-dynamic'
+
 // GET /api/empresas - Listar empresas
 export async function GET(request: Request) {
   try {

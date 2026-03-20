@@ -1,6 +1,8 @@
 import { NextResponse } from 'next/server'
 import { handleWhatsAppWebhook } from '@/lib/whatsapp'
 
+export const dynamic = 'force-dynamic'
+
 // POST /api/whatsapp/webhook - Receber mensagens do WhatsApp
 export async function POST(request: Request) {
   try {

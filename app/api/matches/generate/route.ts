@@ -3,6 +3,8 @@ import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { generateMatches } from '@/lib/matching'
 
+export const dynamic = 'force-dynamic'
+
 // POST /api/matches/generate - Gerar matches com IA
 export async function POST(request: Request) {
   try {

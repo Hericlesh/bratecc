@@ -3,6 +3,8 @@ import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/db'
 
+export const dynamic = 'force-dynamic'
+
 // PUT /api/empresas/[id] - Atualizar empresa
 export async function PUT(
   request: Request,

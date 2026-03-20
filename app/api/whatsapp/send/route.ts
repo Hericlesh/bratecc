@@ -3,6 +3,8 @@ import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { sendWhatsApp } from '@/lib/whatsapp'
 
+export const dynamic = 'force-dynamic'
+
 // POST /api/whatsapp/send - Enviar WhatsApp
 export async function POST(request: Request) {
   try {

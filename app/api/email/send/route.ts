@@ -3,6 +3,8 @@ import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { sendEmail } from '@/lib/email'
 
+export const dynamic = 'force-dynamic'
+
 // POST /api/email/send - Enviar email
 export async function POST(request: Request) {
   try {

@@ -3,6 +3,8 @@ import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { updateMatchStatus } from '@/lib/matching'
 
+export const dynamic = 'force-dynamic'
+
 // PUT /api/matches/[id]/status - Atualizar status do match
 export async function PUT(
   request: Request,
