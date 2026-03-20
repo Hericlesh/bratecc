@@ -1,0 +1,154 @@
+// This is your Prisma schema file
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("POSTGRES_PRISMA_URL")
+  directUrl = env("POSTGRES_URL_NON_POOLING")
+}
+
+model User {
+  id        String   @id @default(cuid())
+  email     String   @unique
+  password  String
+  name      String
+  role      UserRole @default(ADMIN)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+enum UserRole {
+  ADMIN
+  ASSOCIADO
+}
+
+model Empresa {
+  id          String   @id @default(cuid())
+  name        String
+  setor       String
+  cidade      String
+  estado      String
+  tipo        String   // Exportador, Importador, Ambos
+  email       String
+  whatsapp    String?
+  necessidades String  @db.Text
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  matches     Match[]
+  
+  @@index([setor])
+  @@index([tipo])
+}
+
+model Associado {
+  id          String   @id @default(cuid())
+  name        String
+  email       String   @unique
+  whatsapp    String?
+  servicos    String   @db.Text
+  segmento    String
+  categorias  String[] // Para Rede B2B
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  matches     Match[]
+  produtos    Produto[]
+  
+  @@index([segmento])
+}
+
+model Produto {
+  id          String   @id @default(cuid())
+  associadoId String
+  associado   Associado @relation(fields: [associadoId], references: [id], onDelete: Cascade)
+  name        String
+  categoria   String
+  descricao   String   @db.Text
+  buscaParceria String[] // Categorias que busca
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  
+  @@index([associadoId])
+  @@index([categoria])
+}
+
+model Match {
+  id              String      @id @default(cuid())
+  empresaId       String
+  empresa         Empresa     @relation(fields: [empresaId], references: [id], onDelete: Cascade)
+  associadoId     String
+  associado       Associado   @relation(fields: [associadoId], references: [id], onDelete: Cascade)
+  score           Int         // 0-100
+  status          MatchStatus @default(PENDING)
+  empresaNeed     String      @db.Text
+  associadoService String     @db.Text
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+  
+  @@index([empresaId])
+  @@index([associadoId])
+  @@index([status])
+  @@index([score])
+}
+
+enum MatchStatus {
+  PENDING
+  CONTACTED
+  INTERESTED
+  CONFIRMED
+  REJECTED
+}
+
+model Evento {
+  id          String   @id @default(cuid())
+  name        String
+  dataInicio  DateTime
+  dataFim     DateTime
+  local       String
+  whatsapp    String
+  status      EventoStatus @default(PLANEJADO)
+  categorias  String[]
+  descricao   String?  @db.Text
+  participantes Int     @default(0)
+  matches     Int      @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  
+  @@index([status])
+  @@index([dataInicio])
+}
+
+enum EventoStatus {
+  PLANEJADO
+  ATIVO
+  ENCERRADO
+}
+
+model EmailLog {
+  id          String   @id @default(cuid())
+  to          String
+  subject     String
+  body        String   @db.Text
+  status      String   // sent, failed
+  error       String?  @db.Text
+  createdAt   DateTime @default(now())
+  
+  @@index([to])
+  @@index([status])
+  @@index([createdAt])
+}
+
+model WhatsAppLog {
+  id          String   @id @default(cuid())
+  to          String
+  message     String   @db.Text
+  status      String   // sent, failed, received
+  response    String?  @db.Text
+  createdAt   DateTime @default(now())
+  
+  @@index([to])
+  @@index([status])
+  @@index([createdAt])
+}
