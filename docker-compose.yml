@@ -1,0 +1,108 @@
+# ══════════════════════════════════════════════════════════════
+# BRATECC Connect AI - Docker Compose
+# ══════════════════════════════════════════════════════════════
+#
+# Uso:
+#   docker compose up -d          → Inicia tudo
+#   docker compose logs -f        → Ver logs em tempo real
+#   docker compose down           → Para tudo
+#   docker compose down -v        → Para tudo e apaga dados
+#
+# ══════════════════════════════════════════════════════════════
+
+version: "3.8"
+
+services:
+  # ─── BANCO DE DADOS ───
+  postgres:
+    image: postgres:16-alpine
+    container_name: bratecc-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-bratecc}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-bratecc2026}
+      POSTGRES_DB: ${POSTGRES_DB:-bratecc_db}
+    ports:
+      - "${DB_PORT_EXTERNAL:-5432}:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-bratecc} -d ${POSTGRES_DB:-bratecc_db}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    networks:
+      - bratecc-network
+
+  # ─── BACKEND API ───
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: bratecc-backend
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-bratecc}:${POSTGRES_PASSWORD:-bratecc2026}@postgres:5432/${POSTGRES_DB:-bratecc_db}?schema=public
+      DB_HOST: postgres
+      DB_PORT: 5432
+      JWT_SECRET: ${JWT_SECRET:-bratecc-jwt-secret-2026-production}
+      JWT_EXPIRES_IN: ${JWT_EXPIRES_IN:-7d}
+      PORT: 3001
+      NODE_ENV: ${NODE_ENV:-production}
+      FRONTEND_URL: ${FRONTEND_URL:-http://localhost}
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+      GEMINI_MODEL: ${GEMINI_MODEL:-gemini-2.5-flash}
+      META_WHATSAPP_TOKEN: ${META_WHATSAPP_TOKEN:-EAAMXmzZCfSjIBROlEn0bMkDxZCn3TbdslmK0ajqYcyoSmEMIkS8zsqo4G2AZACRD3dZBmF7SJh5ZAxkTaA4sxSGP5762vswZAim2N9cGoFsF8ScvsBpERn1J8gVXR4XiqUZBmHhAaWLtkUh9bwLdDLsOYBck2kkfgAAlwLVJTBgm3ojVneAZCJIicz4Pc6YZAMwZDZD}
+      META_VERIFY_TOKEN: ${META_VERIFY_TOKEN:-bratecc-verify-token-2026}
+      WHATSAPP_LINE_ID: ${WHATSAPP_LINE_ID:-942923015574587}
+      # ─── HSM templates (handshake 2 etapas) ───
+      HSM_TEMPLATE_INICIO: ${HSM_TEMPLATE_INICIO:-hsmbra}
+      HSM_TEMPLATE_AVANCO: ${HSM_TEMPLATE_AVANCO:-hsmbrac}
+      HSM_TEMPLATE_EVENTO: ${HSM_TEMPLATE_EVENTO:-hsmbraevent}
+      HSM_TEMPLATE_EVENTO_SINERGIA_INICIO: ${HSM_TEMPLATE_EVENTO_SINERGIA_INICIO:-hsm_evento_empresa_associado}
+      HSM_TEMPLATE_LANGUAGE: ${HSM_TEMPLATE_LANGUAGE:-pt_BR}
+      # ─── Admin (usado pelo seed) ───
+      ADMIN_EMAIL: ${ADMIN_EMAIL:-admin@bratecc.com}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-admin123}
+      # ─── Cron de recalculo de scores ───
+      SCORE_CRON_ENABLED: ${SCORE_CRON_ENABLED:-true}
+      SCORE_CRON_PATTERN: ${SCORE_CRON_PATTERN:-0 * * * *}
+      # ─── Seed ───
+      # RUN_DB_SEED=1        → seed COMPLETO (apaga tudo + dados demo)
+      # RUN_DB_SEED=minimal  → seed MÍNIMO (apaga tudo, cria só admin)
+      # (vazio)              → não mexe no banco
+      # Use só no primeiro up. Railway: rode manualmente uma vez.
+      RUN_DB_SEED: ${RUN_DB_SEED:-}
+    ports:
+      - "3001:3001"
+    networks:
+      - bratecc-network
+
+  # ─── FRONTEND ───
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      args:
+        # URL relativa: browser chama mesmo host+protocolo, nginx proxia /api → backend:3001.
+        # Evita mixed content em HTTPS. Sobrescreva apenas se for usar API em outro host.
+        VITE_API_URL: ${VITE_API_URL:-/api}
+    container_name: bratecc-frontend
+    restart: unless-stopped
+    depends_on:
+      - backend
+    ports:
+      - "${APP_PORT:-80}:80"
+    networks:
+      - bratecc-network
+
+volumes:
+  postgres_data:
+    driver: local
+
+networks:
+  bratecc-network:
+    driver: bridge

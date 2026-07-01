@@ -1,0 +1,39 @@
+{
+  "name": "bratecc-backend",
+  "version": "1.0.0",
+  "description": "Backend API para BRATECC Connect AI",
+  "main": "src/index.js",
+  "scripts": {
+    "dev": "nodemon src/index.js",
+    "start": "node src/index.js",
+    "db:setup": "node scripts/db-setup.cjs",
+    "db:setup:seed": "node scripts/db-setup.cjs && node prisma/seed.js",
+    "db:migrate": "node scripts/prisma-with-local-env.cjs migrate dev",
+    "db:migrate:deploy": "node scripts/prisma-with-local-env.cjs migrate deploy",
+    "db:push": "node scripts/prisma-with-local-env.cjs db push",
+    "db:seed": "node prisma/seed.js",
+    "db:seed:minimal": "node prisma/seed-minimal.js",
+    "db:studio": "node scripts/prisma-with-local-env.cjs studio",
+    "db:generate": "node scripts/prisma-with-local-env.cjs generate",
+    "db:reset": "node scripts/prisma-with-local-env.cjs migrate reset --force && npm run db:seed"
+  },
+  "dependencies": {
+    "@prisma/client": "^5.10.0",
+    "bcryptjs": "^2.4.3",
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.5",
+    "express": "^4.18.3",
+    "express-validator": "^7.0.1",
+    "jsonwebtoken": "^9.0.2",
+    "morgan": "^1.10.0",
+    "node-cron": "^3.0.3",
+    "pg": "^8.11.3"
+  },
+  "devDependencies": {
+    "nodemon": "^3.1.0",
+    "prisma": "^5.10.0"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}

@@ -1,0 +1,15 @@
+# Um único serviço web + PostgreSQL (plugin) = 2 blocos no Railway.
+# Root Directory do serviço: raiz do repositório (onde está este arquivo).
+#
+# Variáveis: DATABASE_URL (referência ao Postgres), JWT_SECRET,
+# FRONTEND_URL = URL pública deste mesmo serviço (CORS), demais opcionais.
+
+[build]
+builder = "DOCKERFILE"
+dockerfilePath = "Dockerfile"
+
+[deploy]
+healthcheckPath = "/health"
+# Primeiro deploy: download npx/prisma + migrate pode passar de 45s
+healthcheckTimeout = 180
+restartPolicyType = "ON_FAILURE"

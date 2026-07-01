@@ -1,0 +1,493 @@
+// ═══════════════════════════════════════════════════════════
+// BRATECC Connect AI - Schema do Banco de Dados PostgreSQL
+// ═══════════════════════════════════════════════════════════
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ─── USUÁRIOS DO SISTEMA ───
+model User {
+  id        Int      @id @default(autoincrement())
+  email     String   @unique
+  senha     String
+  role      Role     @default(ASSOCIADO)
+  ativo     Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relacionamentos
+  associado    Associado?
+  universidade Universidade?
+
+  @@map("users")
+}
+
+enum Role {
+  ADMIN
+  ASSOCIADO
+  UNIVERSIDADE
+}
+
+// ─── EMPRESAS (Importadoras/Exportadoras) ───
+model Empresa {
+  id           Int      @id @default(autoincrement())
+  nome         String
+  setor        String
+  porte        String?  // MEI, Micro, Pequeno, Médio, Grande
+  cidade       String
+  estado       String
+  tipo         TipoEmpresa
+  email        String   @unique
+  telefone     String?
+  descricao    String?  @db.Text
+  necessidades String?  @db.Text
+  produtosOferecidos String? @db.Text
+  produtosDemandados String? @db.Text
+  ativo        Boolean  @default(true)
+  // Vínculo exclusivo a um evento — empresa só participa de matches daquele evento
+  // (não aparece em matches globais Assoc × Empresa). Preenchido apenas quando o
+  // cadastro vem pelo link público de inscrição do evento.
+  eventoOrigemId Int?
+  eventoOrigem   Evento? @relation(fields: [eventoOrigemId], references: [id], onDelete: SetNull)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  // Classificação IA
+  classificacaoIA Json?  // Classificação gerada pela IA
+
+  // Relacionamentos
+  matches             Match[]
+  eventosParticipados EventoParticipante[]
+  items               Item[]
+
+  @@index([eventoOrigemId])
+  @@map("empresas")
+}
+
+enum TipoEmpresa {
+  EXPORTADOR
+  IMPORTADOR
+  AMBOS
+}
+
+// ─── ASSOCIADOS BRATECC ───
+model Associado {
+  id         Int      @id @default(autoincrement())
+  nome       String
+  tipoPessoa String?  // "FISICA" ou "JURIDICA" — metadado, não afeta regras
+  segmento   String
+  porte      String?  // MEI, Micro, Pequeno, Médio, Grande
+  email      String   @unique
+  telefone   String?
+  whatsapp   String?
+  servicos   String?  @db.Text
+  produtosOferecidos String? @db.Text
+  produtosDemandados String? @db.Text
+  descricao  String?  @db.Text
+  categorias String[] // Array de categorias: Financial, Logistics, Legal, Technology, etc.
+  ativo      Boolean  @default(true)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  // Classificação IA
+  classificacaoIA Json?  // Classificação gerada pela IA
+
+  // Relacionamento com usuário do sistema
+  userId Int?  @unique
+  user   User? @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  // Relacionamentos
+  matches             Match[]
+  matchesB2BOrigem    MatchB2B[] @relation("AssociadoOrigem")
+  matchesB2BDestino   MatchB2B[] @relation("AssociadoDestino")
+  eventosParticipados EventoAssociado[]
+  items               Item[]
+  vagas               Vaga[]
+
+  @@map("associados")
+}
+
+// ─── EVENTOS / FEIRAS ───
+model Evento {
+  id           Int           @id @default(autoincrement())
+  nome         String
+  local        String
+  data         DateTime
+  dataFim      DateTime?
+  descricao    String?       @db.Text
+  numeroWhatsapp String?
+  status       StatusEvento  @default(PLANEJADO)
+  categorias   String[]      // Categorias do evento
+  // Inscrição pública: slug para link de auto-cadastro
+  inscricaoSlug  String?  @unique
+  inscricaoAtiva Boolean  @default(true)
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+
+  // Relacionamentos
+  participantes EventoParticipante[]
+  associados    EventoAssociado[]
+  matchesEvento MatchEvento[]
+  empresasInscritas Empresa[] // empresas com eventoOrigemId apontando para este evento
+
+  @@map("eventos")
+}
+
+enum StatusEvento {
+  PLANEJADO
+  ATIVO
+  FINALIZADO
+  CANCELADO
+}
+
+// ─── MATCHES: ASSOCIADO x EMPRESA ───
+model Match {
+  id          Int         @id @default(autoincrement())
+  empresaId   Int
+  associadoId Int
+  score       Int         // Porcentagem de compatibilidade (0-100)
+  status      StatusMatch @default(PENDING)
+  produto     String?     // Produto/serviço que gerou o match
+  observacoes String?     @db.Text
+  prioridade  String?     // alta, media, baixa
+  analiseIA   Json?       // Análise detalhada da IA
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+
+  // Relacionamentos
+  empresa   Empresa   @relation(fields: [empresaId], references: [id], onDelete: Cascade)
+  associado Associado @relation(fields: [associadoId], references: [id], onDelete: Cascade)
+
+  @@unique([empresaId, associadoId])
+  @@map("matches")
+}
+
+enum StatusMatch {
+  PENDING
+  CONTACTED
+  INTERESTED
+  CONFIRMED
+  REJECTED
+}
+
+// ─── MATCHES B2B: ASSOCIADO x ASSOCIADO ───
+// IMPORTANTE: sinergia é tratada como BIDIRECIONAL (não-direcional).
+// Convenção: sempre gravar com associadoOrigem < associadoDestino para
+// garantir que o par (A, B) e (B, A) não coexistam como registros distintos.
+// A constraint de unicidade + a normalização no controller garantem isso.
+// Há também um CHECK constraint SQL adicionado via migration manual
+// (ver: prisma/migrations/manual_matchb2b_check.sql) que impede a criação
+// de registros com origem >= destino no próprio banco.
+model MatchB2B {
+  id              Int         @id @default(autoincrement())
+  associadoOrigem Int         // Sempre o MENOR dos dois IDs (convenção)
+  associadoDestino Int        // Sempre o MAIOR dos dois IDs (convenção)
+  score           Int         // Porcentagem de sinergia (0-100)
+  status          StatusMatch @default(PENDING)
+  sinergia        String?     @db.Text // Descrição da sinergia identificada
+  servicoOrigem   String?
+  servicoDestino  String?
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+
+  // Relacionamentos
+  origem  Associado @relation("AssociadoOrigem", fields: [associadoOrigem], references: [id], onDelete: Cascade)
+  destino Associado @relation("AssociadoDestino", fields: [associadoDestino], references: [id], onDelete: Cascade)
+
+  @@unique([associadoOrigem, associadoDestino])
+  @@map("matches_b2b")
+}
+
+// ─── PARTICIPANTES DE EVENTOS (Empresas) ───
+model EventoParticipante {
+  id        Int      @id @default(autoincrement())
+  eventoId  Int
+  empresaId Int
+  confirmado Boolean @default(false)
+  createdAt DateTime @default(now())
+
+  evento  Evento  @relation(fields: [eventoId], references: [id], onDelete: Cascade)
+  empresa Empresa @relation(fields: [empresaId], references: [id], onDelete: Cascade)
+
+  @@unique([eventoId, empresaId])
+  @@map("evento_participantes")
+}
+
+// ─── ASSOCIADOS EM EVENTOS ───
+model EventoAssociado {
+  id          Int      @id @default(autoincrement())
+  eventoId    Int
+  associadoId Int
+  createdAt   DateTime @default(now())
+
+  evento    Evento    @relation(fields: [eventoId], references: [id], onDelete: Cascade)
+  associado Associado @relation(fields: [associadoId], references: [id], onDelete: Cascade)
+
+  @@unique([eventoId, associadoId])
+  @@map("evento_associados")
+}
+
+// ─── MATCHES GERADOS DURANTE EVENTOS ───
+model MatchEvento {
+  id              Int         @id @default(autoincrement())
+  eventoId        Int
+  tipoMatch       TipoMatchEvento
+  entidade1Id     Int         // ID da primeira entidade (empresa ou associado)
+  entidade2Id     Int         // ID da segunda entidade
+  score           Int
+  status          StatusMatch @default(PENDING)
+  createdAt       DateTime    @default(now())
+
+  evento Evento @relation(fields: [eventoId], references: [id], onDelete: Cascade)
+
+  @@map("matches_evento")
+}
+
+enum TipoMatchEvento {
+  EMPRESA_EMPRESA       // Participante x Participante
+  EMPRESA_ASSOCIADO     // Participante -> Associado
+  ASSOCIADO_EMPRESA     // Associado -> Participante
+}
+
+// ─── LOG DE ATIVIDADES ───
+model ActivityLog {
+  id        Int      @id @default(autoincrement())
+  userId    Int?
+  action    String
+  entity    String   // Nome da entidade afetada
+  entityId  Int?
+  details   Json?    // Detalhes adicionais em JSON
+  ipAddress String?
+  createdAt DateTime @default(now())
+
+  @@map("activity_logs")
+}
+
+// ═══════════════════════════════════════════════════════════
+// ITENS DE PRODUTOS/SERVIÇOS (OFERECIDOS OU DEMANDADOS)
+// ═══════════════════════════════════════════════════════════
+// Um Item pertence OU a uma Empresa OU a um Associado (nunca ambos).
+// O tipo indica se o item está sendo oferecido ou demandado por aquela entidade.
+// Substitui os antigos campos texto `produtosOferecidos`/`produtosDemandados`.
+
+model Item {
+  id           Int       @id @default(autoincrement())
+  nome         String    // Texto livre do item (ex: "Painéis solares 400W")
+  tipo         TipoItem  // OFERECIDO ou DEMANDADO
+
+  // Código NCM opcional (Nomenclatura Comum do Mercosul)
+  ncmCodigo    String?   // ex: "85414300" (8 dígitos, sem pontos)
+  ncmDescricao String?   // descrição oficial do NCM no momento da seleção (cache)
+
+  // Relacionamento polimórfico: UM dos dois será preenchido
+  empresaId    Int?
+  empresa      Empresa?  @relation(fields: [empresaId], references: [id], onDelete: Cascade)
+  associadoId  Int?
+  associado    Associado? @relation(fields: [associadoId], references: [id], onDelete: Cascade)
+
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  @@index([empresaId, tipo])
+  @@index([associadoId, tipo])
+  @@index([ncmCodigo])
+  @@map("items")
+}
+
+enum TipoItem {
+  OFERECIDO
+  DEMANDADO
+}
+
+// ═══════════════════════════════════════════════════════════
+// UNIVERSIDADES, CANDIDATOS E VAGAS
+// ═══════════════════════════════════════════════════════════
+// Modelo de empregabilidade da BRATECC Connect:
+//   • Universidades cadastram candidatos (estudantes/recém-formados)
+//   • Associados cadastram vagas (estágio, trainee, CLT)
+//   • IA Gemini cruza candidatos × vagas e gera matches scoreados
+//   • Mesma anti-duplicação rígida: par (candidato, vaga) único no banco
+//
+// A universidade tem login próprio (Role=UNIVERSIDADE) e só vê os próprios
+// candidatos. Associado vê suas vagas e os matches recebidos.
+
+model Universidade {
+  id           Int      @id @default(autoincrement())
+  nome         String
+  sigla        String?  // ex: "UFU", "USP"
+  cidade       String?
+  estado       String?
+  email        String   @unique
+  telefone     String?
+  responsavel  String?  // nome da pessoa de contato (coordenador, etc)
+  descricao    String?  @db.Text
+  ativo        Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  // Login da universidade
+  userId       Int?     @unique
+  user         User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  candidatos   Candidato[]
+
+  @@index([estado, cidade])
+  @@map("universidades")
+}
+
+model Candidato {
+  id              Int      @id @default(autoincrement())
+  universidadeId  Int
+  universidade    Universidade @relation(fields: [universidadeId], references: [id], onDelete: Cascade)
+
+  nome            String
+  email           String?
+  telefone        String?
+  whatsapp        String?
+  curso           String?  // ex: "Engenharia de Software", "Administração"
+  periodo         String?  // ex: "8º semestre", "Graduado em 2024"
+  habilidades     String?  @db.Text  // ex: "React, Node.js, Python, inglês fluente"
+  experiencias    String?  @db.Text  // resumo do CV — empresas anteriores, projetos
+  curriculoUrl    String?  // URL externa do currículo (ex: LinkedIn, Drive)
+  disponibilidade String?  // ex: "Estágio", "Trainee", "Full-time", "Remoto"
+  idiomas         String?  // ex: "Português, Inglês avançado, Espanhol básico"
+  cidade          String?
+  estado          String?
+  ativo           Boolean  @default(true)
+
+  // Classificação IA (preenchido em background quando candidato é cadastrado)
+  classificacaoIA Json?
+
+  matches         MatchVaga[]
+
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([universidadeId])
+  @@map("candidatos")
+}
+
+model Vaga {
+  id            Int      @id @default(autoincrement())
+  associadoId   Int
+  associado     Associado @relation(fields: [associadoId], references: [id], onDelete: Cascade)
+
+  titulo        String   // ex: "Estagiário de TI"
+  area          String?  // ex: "Desenvolvimento", "Marketing", "Comercial"
+  modalidade    String?  // ex: "Estágio", "Trainee", "CLT", "PJ"
+  local         String?  // ex: "Houston, TX", "Remoto", "São Paulo, SP"
+  descricao     String?  @db.Text
+  requisitos    String?  @db.Text   // habilidades, idiomas, experiência mínima
+  beneficios    String?  @db.Text
+  salario       String?  // pode ser livre ("a combinar", "R$ 3.000-5.000")
+  aberta        Boolean  @default(true)
+
+  matches       MatchVaga[]
+
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@index([associadoId, aberta])
+  @@map("vagas")
+}
+
+model MatchVaga {
+  id           Int      @id @default(autoincrement())
+  candidatoId  Int
+  vagaId       Int
+  candidato    Candidato @relation(fields: [candidatoId], references: [id], onDelete: Cascade)
+  vaga         Vaga      @relation(fields: [vagaId], references: [id], onDelete: Cascade)
+
+  score        Int      // 0-100, gerado pelo Gemini
+  status       StatusMatch @default(PENDING)
+  observacoes  String?  @db.Text
+  analiseIA    Json?    // { justificativa, oportunidade, geradoEm }
+
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@unique([candidatoId, vagaId])
+  @@index([status])
+  @@map("match_vagas")
+}
+
+// ═══════════════════════════════════════════════════════════
+// CACHE DE CÓDIGOS NCM (Siscomex)
+// ═══════════════════════════════════════════════════════════
+// A API oficial do Siscomex retorna o arquivo completo (~10mil códigos).
+// Armazenamos aqui para permitir busca local rápida por código ou texto.
+// `atualizadoEm` controla TTL (recomendado: 7 dias).
+
+model NcmCache {
+  codigo       String   @id   // ex: "85414300"
+  descricao    String   @db.Text
+  capitulo     String?  // ex: "85"
+  atualizadoEm DateTime @default(now()) @updatedAt
+
+  @@index([descricao])
+  @@map("ncm_cache")
+}
+
+// ═══════════════════════════════════════════════════════════
+// FILA DE RETRY DE HSMs WHATSAPP
+// ═══════════════════════════════════════════════════════════
+// Quando a Meta reporta falha de entrega via webhook (especialmente erro 131049
+// "ecosystem engagement"), enfileira o reenvio. O worker processa com backoff
+// exponencial até atingir o limite de tentativas.
+//
+// Status flow:
+//   PENDING → SENDING → DELIVERED  (sucesso, terminou)
+//   PENDING → SENDING → FAILED → PENDING  (retry, se ainda há tentativas)
+//   PENDING → ABANDONED  (estourou max_attempts ou erro irrecuperável)
+//
+// `params` armazena tudo que o sendTemplate precisa pra refazer o envio
+// (templateName, languageCode, components com parameter_name+text).
+// `originalMessageId` é o message_id do envio que falhou (rastreabilidade).
+//
+// Worker roda a cada 30s, pega itens com `nextAttemptAt <= now()` e status=PENDING.
+
+model WhatsappRetryQueue {
+  id                Int      @id @default(autoincrement())
+  toPhone           String                                    // E.164 normalizado
+  templateName      String                                    // ex: hsmbra, hsmbrac, hsmbraevent
+  languageCode      String   @default("pt_BR")
+  params            Json                                      // components do payload Meta (parameter_name + text)
+
+  // Rastreabilidade
+  originalMessageId String?                                   // message_id que falhou originalmente
+  matchId           Int?                                      // se relacionado a um Match
+  matchB2BId        Int?                                      // se relacionado a um MatchB2B
+  context           String?                                   // descrição livre, ex: "hsmbrac after Hericles confirmed"
+
+  // Estado do retry
+  status            WhatsappRetryStatus @default(PENDING)
+  attempts          Int      @default(0)                      // quantas tentativas já foram feitas
+  maxAttempts       Int      @default(10)                     // limite (configurável por item)
+  lastErrorCode     Int?                                      // código retornado pela Meta na última falha
+  lastErrorMsg      String?  @db.Text
+  lastAttemptAt     DateTime?
+  nextAttemptAt     DateTime @default(now())                  // worker só processa se now() >= nextAttemptAt
+  lastMessageId     String?                                   // último message_id retornado pelo retry
+
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+  completedAt       DateTime?                                 // quando foi resolvido (DELIVERED ou ABANDONED)
+
+  @@index([status, nextAttemptAt])
+  @@index([originalMessageId])
+  @@index([toPhone])
+  @@map("whatsapp_retry_queue")
+}
+
+enum WhatsappRetryStatus {
+  PENDING       // aguardando próxima tentativa
+  SENDING       // worker está processando agora (lock)
+  DELIVERED     // sucesso confirmado pelo webhook
+  ABANDONED     // estourou maxAttempts ou erro irrecuperável
+}

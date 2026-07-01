@@ -1,43 +1,14 @@
 {
-  "name": "bratecc-connect-ai",
-  "version": "1.0.0",
+  "name": "bratecc-ajust",
   "private": true,
+  "description": "Raiz do monorepo — scripts delegam para backend/ e frontend/",
   "scripts": {
-    "dev": "next dev",
-    "build": "prisma generate && next build",
-    "start": "next start",
-    "lint": "next lint",
-    "postinstall": "prisma generate",
-    "db:generate": "prisma generate",
-    "db:migrate": "prisma migrate dev",
-    "db:seed": "tsx prisma/seed.ts",
-    "db:studio": "prisma studio",
-    "db:push": "prisma db push"
-  },
-  "prisma": {
-    "seed": "tsx prisma/seed.ts"
-  },
-  "dependencies": {
-    "@prisma/client": "^5.9.1",
-    "@vercel/postgres": "^0.7.2",
-    "bcryptjs": "^2.4.3",
-    "next": "14.1.0",
-    "next-auth": "^4.24.5",
-    "react": "^18.2.0",
-    "react-dom": "^18.2.0",
-    "resend": "^3.2.0",
-    "zod": "^3.22.4"
-  },
-  "devDependencies": {
-    "@types/bcryptjs": "^2.4.6",
-    "@types/node": "^20.11.16",
-    "@types/react": "^18.2.52",
-    "@types/react-dom": "^18.2.18",
-    "autoprefixer": "^10.4.17",
-    "postcss": "^8.4.33",
-    "prisma": "^5.9.1",
-    "tailwindcss": "^3.4.1",
-    "tsx": "^4.7.1",
-    "typescript": "^5.3.3"
+    "db:migrate": "npm run db:migrate --prefix backend",
+    "db:migrate:deploy": "npm run db:migrate:deploy --prefix backend",
+    "db:push": "npm run db:push --prefix backend",
+    "db:seed": "npm run db:seed --prefix backend",
+    "db:studio": "npm run db:studio --prefix backend",
+    "backend:dev": "npm run dev --prefix backend",
+    "frontend:dev": "npm run dev --prefix frontend"
   }
 }
